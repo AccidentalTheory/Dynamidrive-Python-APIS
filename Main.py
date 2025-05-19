@@ -2,14 +2,15 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 import os
 import logging
-from audio_separator import Separator
+from audio_separator import Separator  # Updated to use new UVR-based module
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-separator = Separator()  # Uses default model (UVR/MDX-BS-RoFormer supported)
+# Initialize Separator with BS-RoFormer model
+separator = Separator(model_name="BS-RoFormer")  # Explicitly set BS-RoFormer
 UPLOAD_DIR = "./uploads"
 OUTPUT_DIR = "./outputs"
 
@@ -20,7 +21,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 @app.post("/separate")
 async def separate_audio(file: UploadFile = File(...), model_filename: str = Form(None)):
     """
-    Separate an audio file into multiple tracks using the specified or default model.
+    Separate an audio file into multiple tracks using the specified or default model (BS-RoFormer).
     """
     # Save uploaded file
     input_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -37,23 +38,14 @@ async def separate_audio(file: UploadFile = File(...), model_filename: str = For
     os.makedirs(file_output_dir, exist_ok=True)
 
     # Run separation
-    logger.info(f"Starting separation for {file.filename} with model: {model_filename or 'default'}")
+    logger.info(f"Starting separation for {file.filename} with model: {model_filename or 'BS-RoFormer'}")
     try:
-        if model_filename:
-            separator.separate(input_path, file_output_dir, model_filename=model_filename)
-        else:
-            separator.separate(input_path, file_output_dir)
+        output_files = separator.separate(input_path, file_output_dir, model_name=model_filename)
     except Exception as e:
         logger.error(f"Separation failed: {str(e)}")
         return JSONResponse(status_code=500, content={"error": f"Separation failed: {str(e)}"})
 
-    # Get list of output files (only filenames)
-    output_files = [
-        f for f in os.listdir(file_output_dir)
-        if os.path.isfile(os.path.join(file_output_dir, f))
-    ]
     logger.info(f"Separation complete, output files: {output_files}")
-
     return JSONResponse(status_code=200, content={"output_files": output_files})
 
 @app.get("/download/{filename}")

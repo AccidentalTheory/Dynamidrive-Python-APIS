@@ -1,3 +1,6 @@
-fastapi
-uvicorn
-audio-separator[cpu]
+fastapi==0.111.0
+uvicorn==0.29.0
+ultimatevocalremover==0.1.0  # Ensure this is the correct version
+torch==2.2.2  # Required by ultimatevocalremover for model inference
+numpy==1.26.4
+librosa==0.10.1  # Common dependency for audio processing

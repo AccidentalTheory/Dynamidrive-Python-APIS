@@ -1,13 +1,16 @@
-# fly.toml app configuration file generated for dynamidrive-python-apis on 2025-05-19T10:47:00Z
+# fly.toml app configuration file generated for dynamidrive-python-apis on 2025-05-19T11:16:00Z
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 
 app = "dynamidrive-python-apis"
 primary_region = "sea"
 
 [build]
+    # Ensure dependencies are installed
+    [build.args]
+        PIP_NO_CACHE_DIR = "off"
 
 [[services]]
-    internal_port = 8000  # Updated to match Uvicorn default
+    internal_port = 8000
     protocol = "tcp"
     [services.concurrency]
         type = "requests"
@@ -19,7 +22,6 @@ primary_region = "sea"
     [[services.ports]]
         port = 443
         handlers = ["tls", "http"]
-    # Optional: Increase grace period for cold starts
     [services.http_checks]
         interval = "10s"
         timeout = "2s"
@@ -28,4 +30,4 @@ primary_region = "sea"
 [vm]
     cpu_kind = "shared"
     cpus = 1
-    memory_mb = 2048  # Increased to 2GB for better performance with audio processing
+    memory_mb = 2048
