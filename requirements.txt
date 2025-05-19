@@ -1,6 +1,6 @@
 fastapi==0.111.0
 uvicorn==0.29.0
-ultimatevocalremover==0.1.0
-torch==2.2.2
+git+https://github.com/Anjok07/ultimatevocalremover.git@master#egg=ultimatevocalremover
+torch==2.1.0+cpu
 numpy==1.26.4
 librosa==0.10.1
