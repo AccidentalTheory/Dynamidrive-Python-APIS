@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir --retries 3 -r requirements.txt
+RUN pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
 
-# Manually install ultimatevocalremover
-RUN git clone https://github.com/Anjok07/ultimatevocalremover.git /tmp/ultimatevocalremover \
+# Manually install ultimatevocalremover with retry logic
+RUN git clone --depth 1 https://github.com/Anjok07/ultimatevocalremover.git /tmp/ultimatevocalremover || \
+    (echo "Git clone failed, retrying..." && git clone --depth 1 https://github.com/Anjok07/ultimatevocalremover.git /tmp/ultimatevocalremover) \
     && cd /tmp/ultimatevocalremover \
     && git checkout master \
     && pip install . \
