@@ -11,11 +11,18 @@ RUN apt-get update && apt-get install -y \
     libblas-dev \
     liblapack-dev \
     libatlas-base-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip
-# Add retry for network issues
 RUN pip install --no-cache-dir --retries 3 -r requirements.txt
+
+# Manually install ultimatevocalremover
+RUN git clone https://github.com/Anjok07/ultimatevocalremover.git /tmp/ultimatevocalremover \
+    && cd /tmp/ultimatevocalremover \
+    && git checkout master \
+    && pip install . \
+    && rm -rf /tmp/ultimatevocalremover
 
 COPY . /app
 
