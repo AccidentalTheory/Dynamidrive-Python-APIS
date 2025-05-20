@@ -1,15 +1,42 @@
-app = "audio-separation-api"
-primary_region = "ord"
+# fly.toml app configuration file
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+
+app = "dynamidrive-api" # This MUST be unique on Fly.io
+primary_region = "sjc"  # Example region: San Jose, CA. Choose one close to you or your users.
 
 [build]
-  builder = "docker"
-
-[env]
-  PYTHONUNBUFFERED = "1"
+  # Fly.io usually auto-detects the Dockerfile.
+  # If your Dockerfile has a different name or path, specify it:
+  # dockerfile = "path/to/your/Dockerfile"
 
 [http_service]
-  internal_port = 8000
+  internal_port = 8000 # The port your FastAPI app (Uvicorn) listens on INSIDE the container
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = true # Scales to zero when idle to save costs (can cause cold starts)
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0 # Set to 1 for always-on (if auto_stop_machines is false or for faster responses)
+  # Grace period for stopping machines
+  # processes = ["app"] # Only if you have multiple process groups
+
+  [[http_service.checks]]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "get"
+    path = "/" # Health check endpoint (your root path in main.py)
+    protocol = "http" # Check is internal, so http is fine
+
+[vm] # Machine configuration
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512 # IMPORTANT: For ML models, you will likely need MUCH more memory (e.g., 2048, 4096, or more)
+                  # and potentially more CPUs or a 'performance' cpu_kind.
+                  # This will impact pricing. Start low for stubs, increase for real models.
+
+# [[statics]] # If you were serving static files directly from a folder
+#   guest_path = "/app/static"
+#   url_prefix = "/static/"
+
+# [[env]] # Example of setting environment variables
+#   MY_VARIABLE = "some_value"
+#   ANOTHER_VARIABLE = "another_value"

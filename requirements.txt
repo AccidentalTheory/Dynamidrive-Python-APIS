@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+python-multipart
+librosa 
+# Add libraries for actual model inference later, e.g.:
+# torch
+# torchaudio
+# onnxruntime
+# numpy
