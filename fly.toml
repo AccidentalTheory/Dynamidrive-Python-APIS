@@ -1,33 +1,18 @@
-# fly.toml app configuration file generated for dynamidrive-python-apis on 2025-05-19T11:16:00Z
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-
-app = "dynamidrive-python-apis"
-primary_region = "sea"
+app = "audio-separation-api"
+primary_region = "ord"
 
 [build]
-    # Ensure dependencies are installed
-    [build.args]
-        PIP_NO_CACHE_DIR = "off"
+  builder = "docker"
 
-[[services]]
-    internal_port = 8000
-    protocol = "tcp"
-    [services.concurrency]
-        type = "requests"
-        hard_limit = 25
-        soft_limit = 20
-    [[services.ports]]
-        port = 80
-        handlers = ["http"]
-    [[services.ports]]
-        port = 443
-        handlers = ["tls", "http"]
-    [services.http_checks]
-        interval = "10s"
-        timeout = "2s"
-        grace_period = "30s"
+[env]
+  PYTHONUNBUFFERED = "1"
 
-[vm]
-    cpu_kind = "shared"
-    cpus = 1
-    memory_mb = 4096
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+
+[processes]
+  app = "uvicorn server:app --host 0.0.0.0 --port 8000"

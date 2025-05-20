@@ -1,32 +1,27 @@
-FROM python:3.11
+FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    ffmpeg \
-    libsndfile1 \
-    libblas-dev \
-    liblapack-dev \
-    libatlas-base-dev \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    ffmpeg \
+    && rm -rf /apt/lists/*
 
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir --retries 5 --timeout 60 -r requirements.txt
+# Clone the repositories
+RUN git clone https://github.com/NextAudioGen/ultimatevocalremover_api.git
+RUN git clone https://github.com/nomadkaraoke/python-audio-separator.git
 
-# Manually install ultimatevocalremover with retry logic
-RUN git clone --depth 1 https://github.com/Anjok07/ultimatevocalremover.git /tmp/ultimatevocalremover || \
-    (echo "Git clone failed, retrying..." && git clone --depth 1 https://github.com/Anjok07/ultimatevocalremover.git /tmp/ultimatevocalremover) \
-    && cd /tmp/ultimatevocalremover \
-    && git checkout master \
-    && pip install . \
-    && rm -rf /tmp/ultimatevocalremover
+# Install dependencies for both APIs
+RUN pip install --no-cache-dir -r ultimatevocalremover_api/requirements.txt
+RUN pip install --no-cache-dir -r python-audio-separator/requirements.txt
+RUN pip install fastapi uvicorn torch audiofile
 
-COPY . /app
+# Copy FastAPI server code
+COPY server.py .
 
+# Expose port
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the FastAPI server
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
