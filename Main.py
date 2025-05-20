@@ -8,47 +8,24 @@ import logging
 from contextlib import asynccontextmanager
 
 # --- Configuration & Logging ---
-TEMP_STORAGE_PATH = "/app/temp_files"  # Directory for temporary file storage
-# Ensure this path matches where your Fly app's public URL will point for downloads
-# For simplicity, we'll serve files directly. For production, consider signed URLs from cloud storage.
+TEMP_STORAGE_PATH = "/app/temp_files"
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# --- Model Loading (Placeholder) ---
-# In a real application, you would load your ML models here.
-# This can be time-consuming, so it's often done at application startup.
-# Example:
-# uvr_model = None
-# bs_roformer_model = None
-
-# def load_models():
-#     global uvr_model, bs_roformer_model
-#     logger.info("Attempting to load ML models...")
-#     try:
-#         # Replace with your actual model loading logic
-#         # uvr_model = YourUVRModelLoader("path/to/uvr_model.onnx")
-#         # bs_roformer_model = YourBSRoFormerLoader("path/to/bs_roformer_model.pth")
-#         logger.info("ML Models would be loaded here if implemented.")
-#     except Exception as e:
-#         logger.error(f"Failed to load models: {e}")
-#         # Decide if the app should fail to start or run with degraded functionality
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Code to run on startup
-    logger.info(f"Temporary storage path: {TEMP_STORAGE_PATH}")
+    logger.info(f"Application startup: Initializing temporary storage at {TEMP_STORAGE_PATH}")
     os.makedirs(TEMP_STORAGE_PATH, exist_ok=True)
-    # load_models() # Uncomment to load models on startup
     logger.info("Application startup complete.")
     yield
-    # Code to run on shutdown
-    logger.info("Cleaning up temporary files...")
-    # Basic cleanup: remove the entire temp_files directory on shutdown.
-    # For a more robust solution, you might want to clean up older files periodically.
+    logger.info("Application shutdown: Starting cleanup of temporary files...")
     if os.path.exists(TEMP_STORAGE_PATH):
-        shutil.rmtree(TEMP_STORAGE_PATH)
-        logger.info(f"Removed temporary storage directory: {TEMP_STORAGE_PATH}")
+        try:
+            shutil.rmtree(TEMP_STORAGE_PATH)
+            logger.info(f"Successfully removed temporary storage directory: {TEMP_STORAGE_PATH}")
+        except Exception as e:
+            logger.error(f"Error during cleanup of temporary storage directory {TEMP_STORAGE_PATH}: {e}", exc_info=True)
     logger.info("Application shutdown complete.")
 
 
@@ -57,148 +34,146 @@ app = FastAPI(lifespan=lifespan)
 # --- Helper Functions ---
 async def save_upload_file_to_job_dir(upload_file: UploadFile, job_dir: str) -> str:
     """Saves an uploaded file to a specific job directory."""
-    try:
-        # Sanitize filename (basic example)
-        filename = os.path.basename(upload_file.filename or "default_audio.tmp")
-        # Prevent path traversal attacks by ensuring filename is just a name
-        if ".." in filename or "/" in filename:
-            raise HTTPException(status_code=400, detail="Invalid filename.")
+    original_filename = upload_file.filename or "default_audio.tmp"
+    # Basic sanitization for filename
+    filename = os.path.basename(original_filename)
+    if not filename or ".." in filename or "/" in filename or "\\" in filename:
+        logger.error(f"Invalid filename received: {original_filename}")
+        raise HTTPException(status_code=400, detail=f"Invalid filename: {original_filename}")
 
-        file_path = os.path.join(job_dir, filename)
+    file_path = os.path.join(job_dir, filename)
+    logger.info(f"Attempting to save uploaded file '{original_filename}' to '{file_path}'")
+    try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(upload_file.file, buffer)
-        logger.info(f"File '{filename}' saved to '{file_path}'")
+        logger.info(f"Successfully saved file '{original_filename}' to '{file_path}', size: {os.path.getsize(file_path)} bytes")
         return file_path
     except Exception as e:
-        logger.error(f"Error saving file {upload_file.filename}: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not save uploaded file: {e}")
+        logger.error(f"Error saving uploaded file {original_filename} to {file_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Could not save uploaded file '{original_filename}': {str(e)}")
     finally:
         await upload_file.close()
+        logger.info(f"Closed uploaded file object for '{original_filename}'")
 
 
 def generate_dummy_output_files(job_dir: str, api_type: str, original_filename: str):
-    """
-    Placeholder function to simulate audio separation.
-    In a real app, this would call your ML model inference code.
-    """
+    """Placeholder function to simulate audio separation."""
     output_filenames = {}
-    base_name, _ = os.path.splitext(original_filename)
+    base_name, ext = os.path.splitext(original_filename)
+    if not base_name: # Handle cases like ".mp3" if basename becomes empty
+        base_name = "output"
+
+    logger.info(f"Generating dummy output files for api_type: {api_type}, original_filename: {original_filename}, base_name: {base_name}")
 
     if api_type == "uvr":
         stems = ["vocals", "instrumental"]
     elif api_type == "bsroformer":
         stems = ["vocals", "drums", "bass", "other"]
     else:
+        logger.warning(f"Unknown api_type '{api_type}' in generate_dummy_output_files.")
         return {}
 
     for stem in stems:
-        # Create dummy .wav files for demonstration
-        # In a real scenario, these would be the output of your models
-        dummy_filename = f"{base_name}_{stem}.wav"
+        dummy_filename = f"{base_name}_{stem}.wav" # Still creating .wav for consistency with API contract
         dummy_filepath = os.path.join(job_dir, dummy_filename)
-        with open(dummy_filepath, "w") as f:
-            f.write(f"This is a dummy '{stem}' track for {original_filename} processed by {api_type}.")
-        output_filenames[stem] = dummy_filename
-        logger.info(f"Generated dummy file: {dummy_filepath}")
+        try:
+            with open(dummy_filepath, "w") as f: # Writing text content to a .wav named file
+                f.write(f"This is a dummy '{stem}' track for {original_filename} processed by {api_type}.")
+            output_filenames[stem] = dummy_filename
+            logger.info(f"Generated dummy file: {dummy_filepath}")
+        except Exception as e:
+            logger.error(f"Failed to generate dummy file {dummy_filepath}: {e}", exc_info=True)
+            # Decide if one failed dummy file should stop the whole process or just be skipped
     return output_filenames
 
 # --- API Endpoints ---
 @app.get("/")
 async def root():
-    """Root endpoint to check if the API is running."""
-    logger.info("Root endpoint accessed.")
+    logger.info("Root endpoint '/' accessed.")
     return {"message": "Audio Separation API is running. Use /separate/{api_type} to process files."}
 
 @app.post("/separate/{api_type}")
 async def separate_audio(request: Request, api_type: str, file: UploadFile = File(...)):
-    """
-    Endpoint to upload an audio file and initiate separation.
-    api_type can be 'uvr' or 'bsroformer'.
-    """
-    logger.info(f"Received separation request for API type: {api_type}, file: {file.filename}")
-
-    if api_type not in ["uvr", "bsroformer"]:
-        logger.warning(f"Invalid API type requested: {api_type}")
-        raise HTTPException(status_code=400, detail="Invalid API type. Choose 'uvr' or 'bsroformer'.")
-
-    if not file.filename:
-        logger.warning("File upload attempted with no filename.")
-        raise HTTPException(status_code=400, detail="No filename provided with the upload.")
-
-    # Create a unique directory for this processing job
     request_id = str(uuid.uuid4())
     job_dir = os.path.join(TEMP_STORAGE_PATH, request_id)
-    os.makedirs(job_dir, exist_ok=True)
-    logger.info(f"Created job directory: {job_dir} for request ID: {request_id}")
+    
+    logger.info(f"Request ID {request_id}: Received separation request for API type: '{api_type}', input filename: '{file.filename}', content-type: '{file.content_type}'")
 
-    input_audio_path = ""
+    if api_type not in ["uvr", "bsroformer"]:
+        logger.warning(f"Request ID {request_id}: Invalid API type requested: {api_type}")
+        raise HTTPException(status_code=400, detail=f"Invalid API type. Choose 'uvr' or 'bsroformer'. Provided: '{api_type}'")
+
+    if not file.filename:
+        logger.warning(f"Request ID {request_id}: File upload attempted with no filename.")
+        raise HTTPException(status_code=400, detail="No filename provided with the upload.")
+
     try:
+        os.makedirs(job_dir, exist_ok=True)
+        logger.info(f"Request ID {request_id}: Created job directory: {job_dir}")
+
         input_audio_path = await save_upload_file_to_job_dir(file, job_dir)
+        logger.info(f"Request ID {request_id}: Input file saved to '{input_audio_path}'")
 
-        # --- Actual Model Inference Would Happen Here ---
-        logger.info(f"Simulating '{api_type}' processing for: {input_audio_path}")
-        # Example:
-        # if api_type == "uvr":
-        #     output_filenames = uvr_model.separate(input_audio_path, job_dir)
-        # elif api_type == "bsroformer":
-        #     output_filenames = bs_roformer_model.separate(input_audio_path, job_dir)
-        # For now, we use a placeholder:
+        logger.info(f"Request ID {request_id}: Simulating '{api_type}' processing for: {input_audio_path}")
         output_filenames = generate_dummy_output_files(job_dir, api_type, os.path.basename(input_audio_path))
-        # --- End Model Inference Placeholder ---
-
+        
         if not output_filenames:
-            logger.error(f"Processing failed to generate output files for {api_type}.")
-            raise HTTPException(status_code=500, detail="Processing stub failed to generate output files.")
+            logger.error(f"Request ID {request_id}: Processing by '{api_type}' failed to generate any output files for '{os.path.basename(input_audio_path)}'.")
+            # This case might indicate a logic error in generate_dummy_output_files or an unknown api_type not caught earlier
+            raise HTTPException(status_code=500, detail=f"Processing for '{api_type}' generated no output files. This might be an issue with the API type or internal processing logic.")
 
-        # Construct full URLs for downloading the processed files
-        # The base URL needs to be the public URL of your Fly app
-        # For simplicity, we are returning relative paths that the /download endpoint will handle.
-        # The iOS app will need to prepend the Fly app's base URL.
         output_file_urls = {}
         for stem_name, filename in output_filenames.items():
-            # This path is relative to the API root, handled by the /download endpoint
             output_file_urls[stem_name] = f"/download/{request_id}/{filename}"
 
-        logger.info(f"Processing complete for request {request_id}. Output URLs: {output_file_urls}")
-        return JSONResponse(content={
+        response_payload = {
             "message": f"'{api_type}' separation (stub) complete for '{file.filename}'.",
             "request_id": request_id,
             "input_file": file.filename,
-            "output_urls": output_file_urls # These are relative paths for the /download endpoint
-        })
+            "output_urls": output_file_urls
+        }
+        logger.info(f"Request ID {request_id}: Processing complete. Sending JSON response: {response_payload}")
+        return JSONResponse(content=response_payload)
 
-    except HTTPException:
-        # Re-raise HTTPExceptions directly
-        raise
+    except HTTPException as http_exc:
+        logger.error(f"Request ID {request_id}: HTTPException during separation: {http_exc.status_code} - {http_exc.detail}", exc_info=True)
+        raise # Re-raise HTTPException to be handled by FastAPI's default error handler (which returns JSON)
     except Exception as e:
-        logger.error(f"An unexpected error occurred during separation for request {request_id}: {e}", exc_info=True)
-        # Clean up job_dir on error if it was created
+        logger.error(f"Request ID {request_id}: An unexpected error occurred during separation: {str(e)}", exc_info=True)
+        # Clean up job_dir on unexpected error
         if os.path.exists(job_dir):
-            shutil.rmtree(job_dir)
-            logger.info(f"Cleaned up job directory {job_dir} due to error.")
-        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+            try:
+                shutil.rmtree(job_dir)
+                logger.info(f"Request ID {request_id}: Cleaned up job directory {job_dir} due to unexpected error.")
+            except Exception as cleanup_exc:
+                logger.error(f"Request ID {request_id}: Error during cleanup of job directory {job_dir} after another error: {cleanup_exc}", exc_info=True)
+        # Return a generic 500 error as JSON
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"An internal server error occurred. Request ID: {request_id}. Error: {str(e)}"}
+        )
 
 
 @app.get("/download/{request_id}/{filename}")
 async def download_separated_file(request_id: str, filename: str):
-    """
-    Endpoint to download a processed audio file.
-    """
-    logger.info(f"Download request for file: {filename}, request ID: {request_id}")
+    logger.info(f"Download request for file: '{filename}', request ID: '{request_id}'")
 
-    # Basic sanitization
-    if ".." in request_id or "/" in request_id or ".." in filename or "/" in filename:
-        logger.warning(f"Invalid characters in download path: {request_id}/{filename}")
-        raise HTTPException(status_code=400, detail="Invalid file path.")
+    # Sanitize request_id and filename to prevent path traversal
+    if not request_id.isalnum() or ".." in request_id or "/" in request_id: # Basic check for UUID format
+        logger.warning(f"Invalid characters or format in download request_id: '{request_id}'")
+        raise HTTPException(status_code=400, detail="Invalid request ID format.")
+    
+    # Basename again to be sure, though it should be clean from generation
+    sane_filename = os.path.basename(filename)
+    if sane_filename != filename or ".." in sane_filename or "/" in sane_filename:
+        logger.warning(f"Invalid characters or format in download filename: '{filename}' (sanitized to '{sane_filename}')")
+        raise HTTPException(status_code=400, detail="Invalid filename format.")
 
-    file_path = os.path.join(TEMP_STORAGE_PATH, request_id, filename)
+    file_path = os.path.join(TEMP_STORAGE_PATH, request_id, sane_filename)
 
     if os.path.isfile(file_path):
         logger.info(f"Serving file: {file_path}")
-        # media_type should ideally be specific (e.g., 'audio/wav', 'audio/mpeg')
-        # For dummy files, 'text/plain' might be more accurate, but for real audio, use 'audio/*'
-        return FileResponse(path=file_path, media_type='audio/wav', filename=filename) # Assume WAV for now
+        return FileResponse(path=file_path, media_type='audio/wav', filename=sane_filename) # Assuming WAV for dummy
     else:
         logger.warning(f"File not found for download: {file_path}")
-        raise HTTPException(status_code=404, detail="File not found. It may have been cleaned up or never existed.")
-
+        raise HTTPException(status_code=404, detail=f"File not found: '{sane_filename}'. It may have been cleaned up or the request ID is incorrect.")

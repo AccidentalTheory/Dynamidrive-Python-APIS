@@ -29,7 +29,7 @@ primary_region = "sjc"  # Example region: San Jose, CA. Choose one close to you 
 [vm] # Machine configuration
   cpu_kind = "shared"
   cpus = 1
-  memory_mb = 512 # IMPORTANT: For ML models, you will likely need MUCH more memory (e.g., 2048, 4096, or more)
+  memory_mb = 4096 # IMPORTANT: For ML models, you will likely need MUCH more memory (e.g., 2048, 4096, or more)
                   # and potentially more CPUs or a 'performance' cpu_kind.
                   # This will impact pricing. Start low for stubs, increase for real models.
 
